@@ -6,11 +6,11 @@ GPU time-slicing enables workloads that are scheduled on oversubscribed GPUs to 
 
 The deployment assumes that there is a functioning kubernetes cluster
 
-1. `helm repo add nvidia https://helm.ngc.nvidia.com/nvidia \
+1. `helm repo add nvidia https://helm.ngc.nvidia.com/nvidia 
     && helm repo update`
-2. `helm install --wait --generate-name \
-    -n gpu-operator --create-namespace \
-    nvidia/gpu-operator \
+2. `helm install --wait --generate-name 
+    -n gpu-operator --create-namespace 
+    nvidia/gpu-operator 
     --version=v24.9.2 `
 
 This will deploy the GPU opertor in all nodes.

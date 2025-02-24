@@ -67,12 +67,12 @@ data:
           replicas: 4 # Can be desired number of replicas
 ```
 2. Label all the GPU nodes with their respective GPU name by executing \
-   `kubectl label node --selector=nvidia.com/gpu.product=Tesla-T4  nvidia.com/device-plugin.config=tesla-t4` \
-   `kubectl label node --selector=nvidia.com/gpu.product=Tesla-V100-PCIE-16GB   nvidia.com/device-plugin.config=Tesla-V100-PCIE-16GB`
-3. Patch the cluster policy with `time-slicing-config-fine` configmap \
+   `kubectl label node --selector=nvidia.com/gpu.product=Tesla-T4  nvidia.com/device-plugin.config=tesla-t4` 
+   `kubectl label node --selector=nvidia.com/gpu.product=Tesla-V100-PCIE-16GB   nvidia.com/device-plugin.config=Tesla-V100-PCIE-16GB`\
+3. Patch the cluster policy with `time-slicing-config-fine` configmap 
   `kubectl patch clusterpolicies.nvidia.com/cluster-policy     -n gpu-operator --type merge     -p '{"spec": {"devicePlugin": {"config": {"name": "time-slicing-config-fine"}}}}'` \
 4. Restart the GPU operator daemonset
-   `kubectl rollout restart -n gpu-operator daemonset/nvidia-device-plugin-daemonset` \
+   `kubectl rollout restart -n gpu-operator daemonset/nvidia-device-plugin-daemonset` 
 ## Before time slicing
 ```
 Name:               node1

@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: intrallm-webui-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: intrallm-webui-dev
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: intrallm-webui-dev
+    spec:
+      volumes:
+        - name: intrallm-webui-dev
+          persistentVolumeClaim:
+            claimName: intrallm-webui-dev
+      containers:
+        - name: hs-intrallm
+          image: 'peratchikannan/hs-public:intrallm-wwebui-dev-v2'
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          imagePullPolicy: Always
+          resources:
+            limits:
+              nvidia.com/gpu: '1'
+            requests:
+              nvidia.com/gpu: '1'
+          volumeMounts:
+            - name: intrallm-webui-dev
+              mountPath: /app/backend/data

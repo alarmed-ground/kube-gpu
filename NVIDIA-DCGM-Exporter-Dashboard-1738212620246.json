@@ -150,7 +150,7 @@
               "app 1": true,
               "app 2": true,
               "container 1": true,
-              "container 2": false,
+              "container 2": true,
               "device 2": true,
               "endpoint 1": true,
               "endpoint 2": true,
@@ -165,13 +165,13 @@
               "job 2": true,
               "kubernetes_node 2": true,
               "modelName 2": true,
-              "namespace 1": true,
+              "namespace 1": false,
               "namespace 2": true,
               "node 1": true,
               "node 2": true,
               "pci_bus_id 1": false,
               "pci_bus_id 2": true,
-              "pod 1": true,
+              "pod 1": false,
               "pod 2": true,
               "service 1": true,
               "service 2": true
@@ -1054,5 +1054,5 @@
   "timezone": "",
   "title": "NVIDIA DCGM Exporter Dashboard",
   "uid": "Oxed_c6Wx",
-  "version": 2
+  "version": 3
 }

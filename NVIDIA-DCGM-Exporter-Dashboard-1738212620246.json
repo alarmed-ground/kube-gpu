@@ -26,7 +26,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 30,
+  "id": 5,
   "links": [],
   "panels": [
     {
@@ -51,8 +51,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -96,7 +95,7 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "11.4.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -129,14 +128,17 @@
         {
           "id": "seriesToColumns",
           "options": {
-            "byField": "instance"
+            "byField": "modelName",
+            "mode": "outer"
           }
         },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
+              "DCGM_FI_DRIVER_VERSION 1": false,
               "DCGM_FI_DRIVER_VERSION 2": true,
+              "Hostname 1": false,
               "Hostname 2": true,
               "Time 1": true,
               "Time 2": true,
@@ -145,6 +147,8 @@
               "Value #B": true,
               "__name__ 1": true,
               "__name__ 2": true,
+              "app 1": true,
+              "app 2": true,
               "container 1": true,
               "container 2": false,
               "device 2": true,
@@ -155,12 +159,18 @@
               "exported_namespace 2": true,
               "exported_pod 2": true,
               "gpu 2": true,
+              "instance 1": true,
+              "instance 2": false,
               "job 1": true,
               "job 2": true,
               "kubernetes_node 2": true,
               "modelName 2": true,
               "namespace 1": true,
               "namespace 2": true,
+              "node 1": true,
+              "node 2": true,
+              "pci_bus_id 1": false,
+              "pci_bus_id 2": true,
               "pod 1": true,
               "pod 2": true,
               "service 1": true,
@@ -237,8 +247,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "#EAB839",
@@ -276,7 +285,7 @@
         "showThresholdMarkers": true,
         "sizing": "auto"
       },
-      "pluginVersion": "11.4.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -339,8 +348,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -372,11 +380,12 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.4.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -408,8 +417,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "#EAB839",
@@ -447,7 +455,7 @@
         "showThresholdMarkers": true,
         "sizing": "auto"
       },
-      "pluginVersion": "11.4.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -512,8 +520,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -545,11 +552,12 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.4.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -612,8 +620,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -645,11 +652,12 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.4.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -716,8 +724,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -749,11 +756,12 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.4.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -818,8 +826,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -851,11 +858,12 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.4.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -918,8 +926,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -951,11 +958,12 @@
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.4.0",
+      "pluginVersion": "12.0.0",
       "targets": [
         {
           "datasource": {
@@ -973,14 +981,14 @@
   ],
   "preload": false,
   "refresh": "auto",
-  "schemaVersion": 40,
+  "schemaVersion": 41,
   "tags": [],
   "templating": {
     "list": [
       {
         "current": {
-          "text": "Prometheus",
-          "value": "prometheus"
+          "text": "prometheus",
+          "value": "aes5v44tspjpcf"
         },
         "includeAll": false,
         "name": "datasource",
@@ -1046,6 +1054,5 @@
   "timezone": "",
   "title": "NVIDIA DCGM Exporter Dashboard",
   "uid": "Oxed_c6Wx",
-  "version": 3,
-  "weekStart": ""
+  "version": 2
 }

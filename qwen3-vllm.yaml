@@ -39,9 +39,9 @@ spec:
               name: hf-token-secret
               key: token
         - name: NCCL_P2P_DISABLE
-          value: 1
+          value: "1"
         - name: VLLM_PORT
-          value: 80
+          value: "80"
         ports:
         - containerPort: 8000
         resources:

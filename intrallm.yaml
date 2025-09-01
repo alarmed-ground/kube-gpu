@@ -18,17 +18,17 @@ spec:
           persistentVolumeClaim:
             claimName: intrallm-webui-dev
       containers:
-        - name: hs-intrallm
-          image: 'peratchikannan/hs-public:intrallm-wwebui-dev-v2'
+        - name: intrallm-webui-dev
+          image: 'peratchikannan/hs-public:intrallm-webui-dev-v55'
           ports:
             - containerPort: 8080
               protocol: TCP
+          env:
+          - name: PROMETHEUS_HOST
+            value: "" # Enter Prometheus host IP before submitting the YAML
           imagePullPolicy: Always
           resources:
-            limits:
-              nvidia.com/gpu: '1'
-            requests:
-              nvidia.com/gpu: '1'
           volumeMounts:
             - name: intrallm-webui-dev
               mountPath: /app/backend/data
+

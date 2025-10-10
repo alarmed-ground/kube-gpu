@@ -22,7 +22,8 @@ spec:
           image: 'peratchikannan/hs-public:intrallm-webui-dev-v55'
           ports:
             - containerPort: 8080
-              protocol: TCPenv:
+              protocol: TCP
+          env:
             - name: PROMETHEUS_HOST
               value: 
             - name: WEBUI_URL

@@ -25,25 +25,25 @@ spec:
               protocol: TCP
           env:
             - name: PROMETHEUS_HOST
-              value: 
+              value: # Prometheus HOST IP goes here
             - name: WEBUI_URL
-              value: 
+              value: # WEBUI public url goes here
             - name: ENABLE_OAUTH_SIGNUP
               value: 'true'
             - name: MICROSOFT_REDIRECT_URI
-              value: 
+              value: # MS redirect URI from Entra goes here
             - name: MICROSOFT_CLIENT_SECRET
-              value: 
+              value:  # MS client secret from Entra goes here
             - name: MICROSOFT_CLIENT_TENANT_ID
-              value: 
+              value:  # MS tenant id from Entra goes here
             - name: MICROSOFT_CLIENT_ID
-              value: 
+              value:  # MS client id from Entra goes here
             - name: OAUTH_MERGE_ACCOUNTS_BY_EMAIL
               value: 'true'
             - name: OAUTH_SESSION_TOKEN_ENCRYPTION_KEY
               value: WEBUI_SECRET_KEY
             - name: OPENID_PROVIDER_URL
-              value: 
+              value: # OPENID provider url goes here
           imagePullPolicy: Always
           resources:
           volumeMounts:

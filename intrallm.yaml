@@ -22,10 +22,27 @@ spec:
           image: 'peratchikannan/hs-public:intrallm-webui-dev-v55'
           ports:
             - containerPort: 8080
-              protocol: TCP
-          env:
-          - name: PROMETHEUS_HOST
-            value: "" # Enter Prometheus host IP before submitting the YAML
+              protocol: TCPenv:
+            - name: PROMETHEUS_HOST
+              value: 
+            - name: WEBUI_URL
+              value: 
+            - name: ENABLE_OAUTH_SIGNUP
+              value: 'true'
+            - name: MICROSOFT_REDIRECT_URI
+              value: 
+            - name: MICROSOFT_CLIENT_SECRET
+              value: 
+            - name: MICROSOFT_CLIENT_TENANT_ID
+              value: 
+            - name: MICROSOFT_CLIENT_ID
+              value: 
+            - name: OAUTH_MERGE_ACCOUNTS_BY_EMAIL
+              value: 'true'
+            - name: OAUTH_SESSION_TOKEN_ENCRYPTION_KEY
+              value: WEBUI_SECRET_KEY
+            - name: OPENID_PROVIDER_URL
+              value: 
           imagePullPolicy: Always
           resources:
           volumeMounts:

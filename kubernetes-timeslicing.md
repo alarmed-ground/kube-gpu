@@ -11,7 +11,7 @@ The deployment assumes that there is a functioning kubernetes cluster
 2. `helm install --wait --generate-name 
     -n gpu-operator --create-namespace 
     nvidia/gpu-operator 
-    --version=v24.9.2 `
+    --version=v25.10.1 `
 
 This will deploy the GPU opertor in all nodes.
 

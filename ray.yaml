@@ -1,0 +1,185 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+
+metadata:
+  name: qwen-gh200-ray
+  namespace: vllm
+
+spec:
+  rayVersion: "2.46.0"
+
+  ########################################
+  # HEAD NODE (Ray ONLY)
+  ########################################
+  headGroupSpec:
+
+    serviceType: ClusterIP
+
+    rayStartParams:
+      dashboard-host: "0.0.0.0"
+
+    template:
+      metadata:
+        labels:
+          app: qwen-gh200
+          ray.io/node-type: head
+
+      spec:
+        runtimeClassName: nvidia
+        hostNetwork: true
+        dnsPolicy: ClusterFirstWithHostNet
+
+        nodeSelector:
+          node-role: s7g
+
+        volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: <claim-name>
+
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Gi
+
+        containers:
+        - name: ray-head
+          image: <image-name>
+
+          ports:
+          - containerPort: 6379
+          - containerPort: 8265
+          - containerPort: 10001
+
+          env:
+          - name: HF_HOME
+            value: /root/.cache/huggingface
+
+          - name: NCCL_DEBUG
+            value: INFO
+
+          - name: NCCL_IB_DISABLE
+            value: "0"
+
+          - name: NCCL_P2P_LEVEL
+            value: SYS
+
+          - name: NCCL_SOCKET_IFNAME
+            value: nm-bond
+
+          - name: NCCL_IB_HCA
+            value: mlx5
+
+          volumeMounts:
+          - mountPath: /root/.cache/huggingface
+            name: hf-cache
+
+          - mountPath: /dev/shm
+            name: dshm
+
+          resources:
+            requests:
+              cpu: "16"
+              memory: 32Gi
+            limits:
+              cpu: "32"
+              memory: 64Gi
+
+          command:
+          - /bin/bash
+          - -lc
+          - |
+            exec ray start \
+              --head \
+              --dashboard-host=0.0.0.0 \
+              --block
+
+  ########################################
+  # WORKERS (2 GH200 nodes)
+  ########################################
+  workerGroupSpecs:
+
+  - groupName: gh200-workers
+    replicas: 2
+
+    rayStartParams: {}
+
+    template:
+      metadata:
+        labels:
+          app: qwen-gh200
+          ray.io/node-type: worker
+
+      spec:
+        runtimeClassName: nvidia
+        hostNetwork: true
+        dnsPolicy: ClusterFirstWithHostNet
+
+        nodeSelector:
+          node-role: s7g
+
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                - key: ray.io/node-type
+                  operator: In
+                  values:
+                  - worker
+              topologyKey: kubernetes.io/hostname
+
+        volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: <claim-name>
+
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Gi
+
+        containers:
+        - name: ray-worker
+          image: <iamge-name>
+          env:
+          - name: HF_HOME
+            value: /root/.cache/huggingface
+
+          - name: TRANSFORMERS_CACHE
+            value: /root/.cache/huggingface/transformers
+
+          - name: HUGGINGFACE_HUB_CACHE
+            value: /root/.cache/huggingface/hub
+
+          - name: NCCL_DEBUG
+            value: INFO
+
+          - name: NCCL_IB_DISABLE
+            value: "0"
+
+          - name: NCCL_P2P_LEVEL
+            value: SYS
+
+          - name: NCCL_SOCKET_IFNAME
+            value: nm-bond
+
+          - name: NCCL_IB_HCA
+            value: mlx5
+
+          volumeMounts:
+          - mountPath: /root/.cache/huggingface
+            name: hf-cache
+
+          - mountPath: /dev/shm
+            name: dshm
+
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              cpu: "24"
+              memory: 128Gi
+            limits:
+              nvidia.com/gpu: 1
+              cpu: "48"
+              memory: 256Gi

@@ -38,7 +38,7 @@ spec:
                 sizeLimit: 64Gi
           containers:
             - name: ray-head
-              image: vllm/vllm-openai:latest
+              image: peratchikannan/hs-public:vllm-rayv0.20.2
               env:
                 - name: HF_TOKEN
                   valueFrom:
@@ -114,7 +114,7 @@ spec:
                   sizeLimit: 64Gi
             containers:
               - name: ray-worker
-                image: vllm/vllm-openai:latest
+                image: peratchikannan/hs-public:vllm-rayv0.20.2
                 env:
                   - name: HF_TOKEN
                     valueFrom:
@@ -183,7 +183,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: ray-job-submitter
-          image: vllm/vllm-openai:latest
+          image: peratchikannan/hs-public:vllm-rayv0.20.2
           command:
             - /bin/bash
             - -c

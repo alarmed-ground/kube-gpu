@@ -1,185 +1,210 @@
 apiVersion: ray.io/v1
-kind: RayCluster
-
+kind: RayJob
 metadata:
-  name: qwen-gh200-ray
+  name: vllm-serve-job
   namespace: vllm
-
 spec:
-  rayVersion: "2.46.0"
+  rayClusterSpec:
+    rayVersion: "2.55.0"
 
-  ########################################
-  # HEAD NODE (Ray ONLY)
-  ########################################
-  headGroupSpec:
+    headGroupSpec:
+      serviceType: ClusterIP
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        port: "6379"
+        num-gpus: "1"
+      template:
+        metadata:
+          labels:
+            app: qwen-gh200
+            ray.io/node-type: head
+        spec:
+          runtimeClassName: nvidia
+          hostNetwork: true
+          dnsPolicy: ClusterFirstWithHostNet
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            fsGroup: 1000
+          nodeSelector:
+            node-role: s7g
+          volumes:
+            - name: hf-cache
+              persistentVolumeClaim:
+                claimName: movigo-vllm
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: 64Gi
+          containers:
+            - name: ray-head
+              image: vllm/vllm-openai:latest
+              env:
+                - name: HF_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: hf-secret
+                      key: token
+                - name: HF_HUB_ENABLE_HF_TRANSFER
+                  value: "1"
+                - name: NCCL_DEBUG
+                  value: INFO
+                - name: NCCL_IB_DISABLE
+                  value: "0"
+                - name: NCCL_SOCKET_IFNAME
+                  value: nm-bond
+                - name: NCCL_IB_HCA
+                  value: mlx5
+                - name: GLOO_SOCKET_IFNAME     
+                  value: nm-bond
+                - name: TP_SOCKET_IFNAME       
+                  value: nm-bond
+              volumeMounts:
+                - name: hf-cache
+                  mountPath: /root/.cache/huggingface
+                - name: dshm
+                  mountPath: /dev/shm
+              resources:
+                requests:
+                  nvidia.com/gpu: 1
+                  cpu: "16"
+                  memory: 256Gi
+                limits:
+                  nvidia.com/gpu: 1
+                  cpu: "32"
+                  memory: 300Gi
 
-    serviceType: ClusterIP
+    workerGroupSpecs:
+      - groupName: gh200-workers
+        replicas: 1
+        rayStartParams:
+          num-gpus: "1"
+        template:
+          metadata:
+            labels:
+              app: qwen-gh200
+              ray.io/node-type: worker
+          spec:
+            runtimeClassName: nvidia
+            hostNetwork: true
+            dnsPolicy: ClusterFirstWithHostNet
+            securityContext:
+              runAsUser: 0
+              runAsGroup: 0
+              fsGroup: 1000
+            nodeSelector:
+              node-role: s7g
+            affinity:
+              podAntiAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  - labelSelector:
+                      matchExpressions:
+                        - key: ray.io/node-type
+                          operator: In
+                          values:
+                            - worker
+                    topologyKey: kubernetes.io/hostname
+            volumes:
+              - name: hf-cache
+                persistentVolumeClaim:
+                  claimName: movigo-vllm
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+                  sizeLimit: 64Gi
+            containers:
+              - name: ray-worker
+                image: vllm/vllm-openai:latest
+                env:
+                  - name: HF_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: hf-secret
+                        key: token
+                  - name: HF_HUB_ENABLE_HF_TRANSFER
+                    value: "1"
+                  - name: NCCL_DEBUG
+                    value: INFO
+                  - name: NCCL_IB_DISABLE
+                    value: "0"
+                  - name: NCCL_SOCKET_IFNAME
+                    value: nm-bond
+                  - name: NCCL_IB_HCA
+                    value: mlx5
+                  - name: GLOO_SOCKET_IFNAME
+                    value: nm-bond
+                  - name: TP_SOCKET_IFNAME
+                    value: nm-bond
+                volumeMounts:
+                  - name: hf-cache
+                    mountPath: /root/.cache/huggingface
+                  - name: dshm
+                    mountPath: /dev/shm
+                resources:
+                  requests:
+                    nvidia.com/gpu: 1
+                    cpu: "24"
+                    memory: 128Gi
+                  limits:
+                    nvidia.com/gpu: 1
+                    cpu: "48"
+                    memory: 256Gi
 
-    rayStartParams:
-      dashboard-host: "0.0.0.0"
+  entrypoint: |
+    python3 -m vllm.entrypoints.openai.api_server \
+      --model /root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B \
+      --host 0.0.0.0 \
+      --port 8000 \
+      --tensor-parallel-size 2 \
+      --distributed-executor-backend ray \
+      --max-model-len 32768 \
+      --enable-prefix-caching \
+      --reasoning-parser qwen3 \
+      --enable-auto-tool-choice \
+      --tool-call-parser hermes \
+      --dtype bfloat16
 
-    template:
-      metadata:
-        labels:
-          app: qwen-gh200
-          ray.io/node-type: head
+  runtimeEnvYAML: |
+    env_vars:
+      HF_TOKEN: ""
+      HF_HUB_ENABLE_HF_TRANSFER: "1"
+      NCCL_DEBUG: "INFO"
+      NCCL_IB_DISABLE: "0"
+      NCCL_SOCKET_IFNAME: "nm-bond"
+      NCCL_IB_HCA: "mlx5"
+      GLOO_SOCKET_IFNAME: "nm-bond"
+      TP_SOCKET_IFNAME: "nm-bond"
 
-      spec:
-        runtimeClassName: nvidia
-        hostNetwork: true
-        dnsPolicy: ClusterFirstWithHostNet
+  shutdownAfterJobFinishes: false
+  ttlSecondsAfterFinished: 0
 
-        nodeSelector:
-          node-role: s7g
-
-        volumes:
-        - name: hf-cache
-          persistentVolumeClaim:
-            claimName: <claim-name>
-
-        - name: dshm
-          emptyDir:
-            medium: Memory
-            sizeLimit: 64Gi
-
-        containers:
-        - name: ray-head
-          image: <image-name>
-
-          ports:
-          - containerPort: 6379
-          - containerPort: 8265
-          - containerPort: 10001
-
-          env:
-          - name: HF_HOME
-            value: /root/.cache/huggingface
-
-          - name: NCCL_DEBUG
-            value: INFO
-
-          - name: NCCL_IB_DISABLE
-            value: "0"
-
-          - name: NCCL_P2P_LEVEL
-            value: SYS
-
-          - name: NCCL_SOCKET_IFNAME
-            value: nm-bond
-
-          - name: NCCL_IB_HCA
-            value: mlx5
-
-          volumeMounts:
-          - mountPath: /root/.cache/huggingface
-            name: hf-cache
-
-          - mountPath: /dev/shm
-            name: dshm
-
-          resources:
-            requests:
-              cpu: "16"
-              memory: 32Gi
-            limits:
-              cpu: "32"
-              memory: 64Gi
-
+  submitterPodTemplate:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: ray-job-submitter
+          image: vllm/vllm-openai:latest
           command:
-          - /bin/bash
-          - -lc
-          - |
-            exec ray start \
-              --head \
-              --dashboard-host=0.0.0.0 \
-              --block
-
-  ########################################
-  # WORKERS (2 GH200 nodes)
-  ########################################
-  workerGroupSpecs:
-
-  - groupName: gh200-workers
-    replicas: 2
-
-    rayStartParams: {}
-
-    template:
-      metadata:
-        labels:
-          app: qwen-gh200
-          ray.io/node-type: worker
-
-      spec:
-        runtimeClassName: nvidia
-        hostNetwork: true
-        dnsPolicy: ClusterFirstWithHostNet
-
-        nodeSelector:
-          node-role: s7g
-
-        affinity:
-          podAntiAffinity:
-            requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchExpressions:
-                - key: ray.io/node-type
-                  operator: In
-                  values:
-                  - worker
-              topologyKey: kubernetes.io/hostname
-
-        volumes:
-        - name: hf-cache
-          persistentVolumeClaim:
-            claimName: <claim-name>
-
-        - name: dshm
-          emptyDir:
-            medium: Memory
-            sizeLimit: 64Gi
-
-        containers:
-        - name: ray-worker
-          image: <iamge-name>
-          env:
-          - name: HF_HOME
-            value: /root/.cache/huggingface
-
-          - name: TRANSFORMERS_CACHE
-            value: /root/.cache/huggingface/transformers
-
-          - name: HUGGINGFACE_HUB_CACHE
-            value: /root/.cache/huggingface/hub
-
-          - name: NCCL_DEBUG
-            value: INFO
-
-          - name: NCCL_IB_DISABLE
-            value: "0"
-
-          - name: NCCL_P2P_LEVEL
-            value: SYS
-
-          - name: NCCL_SOCKET_IFNAME
-            value: nm-bond
-
-          - name: NCCL_IB_HCA
-            value: mlx5
-
-          volumeMounts:
-          - mountPath: /root/.cache/huggingface
-            name: hf-cache
-
-          - mountPath: /dev/shm
-            name: dshm
-
+            - /bin/bash
+            - -c
+            - |
+              pip install -q "ray[default]==2.55.1"
+              ray job submit \
+                --address http://${RAY_DASHBOARD_ADDRESS} \
+                --no-wait \
+                -- python3 -m vllm.entrypoints.openai.api_server \
+                  --model /root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B \
+                  --host 0.0.0.0 \
+                  --port 8000 \
+                  --tensor-parallel-size 2 \
+                  --distributed-executor-backend ray \
+                  --max-model-len 32768 \
+                  --enable-prefix-caching \
+                  --reasoning-parser qwen3 \
+                  --enable-auto-tool-choice \
+                  --tool-call-parser hermes \
+                  --dtype bfloat16
           resources:
             requests:
-              nvidia.com/gpu: 1
-              cpu: "24"
-              memory: 128Gi
-            limits:
-              nvidia.com/gpu: 1
-              cpu: "48"
-              memory: 256Gi
+              cpu: "1"
+              memory: "4Gi"

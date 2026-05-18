@@ -18,6 +18,10 @@ spec:
           labels:
             app: qwen-gh200
             ray.io/node-type: head
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "8080"
+            prometheus.io/path: "/metrics"
         spec:
           runtimeClassName: nvidia
           hostNetwork: true
@@ -36,9 +40,24 @@ spec:
               emptyDir:
                 medium: Memory
                 sizeLimit: 64Gi
+            - name: serve-script
+              configMap:
+                name: vllm-serve-script
+                defaultMode: 0755
           containers:
             - name: ray-head
               image: peratchikannan/hs-public:vllm-rayv0.20.2
+              ports:
+                - containerPort: 6379
+                  name: gcs
+                - containerPort: 8265
+                  name: dashboard
+                - containerPort: 10001
+                  name: client
+                - containerPort: 8000
+                  name: serve
+                - containerPort: 8080
+                  name: metrics
               env:
                 - name: HF_TOKEN
                   valueFrom:
@@ -55,15 +74,17 @@ spec:
                   value: nm-bond
                 - name: NCCL_IB_HCA
                   value: mlx5
-                - name: GLOO_SOCKET_IFNAME     
+                - name: GLOO_SOCKET_IFNAME
                   value: nm-bond
-                - name: TP_SOCKET_IFNAME       
+                - name: TP_SOCKET_IFNAME
                   value: nm-bond
               volumeMounts:
                 - name: hf-cache
                   mountPath: /root/.cache/huggingface
                 - name: dshm
                   mountPath: /dev/shm
+                - name: serve-script
+                  mountPath: /serve
               resources:
                 requests:
                   nvidia.com/gpu: 1
@@ -84,6 +105,10 @@ spec:
             labels:
               app: qwen-gh200
               ray.io/node-type: worker
+            annotations:
+              prometheus.io/scrape: "true"
+              prometheus.io/port: "8080"
+              prometheus.io/path: "/metrics"
           spec:
             runtimeClassName: nvidia
             hostNetwork: true
@@ -115,6 +140,9 @@ spec:
             containers:
               - name: ray-worker
                 image: peratchikannan/hs-public:vllm-rayv0.20.2
+                ports:
+                  - containerPort: 8080
+                    name: metrics
                 env:
                   - name: HF_TOKEN
                     valueFrom:
@@ -150,19 +178,7 @@ spec:
                     cpu: "64"
                     memory: 420Gi
 
-  entrypoint: |
-    python3 -m vllm.entrypoints.openai.api_server \
-      --model /root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B \
-      --host 0.0.0.0 \
-      --port 8000 \
-      --tensor-parallel-size 2 \
-      --distributed-executor-backend ray \
-      --max-model-len 32768 \
-      --enable-prefix-caching \
-      --reasoning-parser qwen3 \
-      --enable-auto-tool-choice \
-      --tool-call-parser hermes \
-      --dtype bfloat16
+  entrypoint: "python3 /serve/serve_app.py"
 
   runtimeEnvYAML: |
     env_vars:
@@ -174,6 +190,11 @@ spec:
       NCCL_IB_HCA: "mlx5"
       GLOO_SOCKET_IFNAME: "nm-bond"
       TP_SOCKET_IFNAME: "nm-bond"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+      VLLM_USE_SIMPLE_KV_OFFLOAD: "1"
+    pip:
+      - httpx
 
   shutdownAfterJobFinishes: false
   ttlSecondsAfterFinished: 0
@@ -185,42 +206,12 @@ spec:
       containers:
         - name: ray-job-submitter
           image: peratchikannan/hs-public:vllm-rayv0.20.2
-          command:
-            - /bin/bash
-            - -c
-            - |
-              pip install -q "ray[default]==2.55.1"
-              ray job submit \
-                --address http://${RAY_DASHBOARD_ADDRESS} \
-                --no-wait \
-                -- PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-                   VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 \
-                   VLLM_USE_SIMPLE_KV_OFFLOAD=1 \
-                   python3 -m vllm.entrypoints.openai.api_server \
-                     --model /root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B \
-                     --distributed-executor-backend ray \
-                     --tensor-parallel-size 1 \
-                     --pipeline-parallel-size 2 \
-                     --kv-offloading-size 400 \
-                     --kv-offloading-backend native \
-                     --gpu-memory-utilization 0.95 \
-                     --max-num-seqs 32 \
-                     --max-model-len 1010000 \
-                     --kv-transfer-config '{"kv_connector_extra_config": {"lazy_offload": false}}' \
-                     --no-disable-hybrid-kv-cache-manager \
-                     --enable-prefix-caching \
-                     --enable-expert-parallel \
-                     --mm-encoder-tp-mode data \
-                     --reasoning-parser qwen3 \
-                     --enable-auto-tool-choice \
-                     --tool-call-parser qwen3_coder \
-                     --attention-config '{"use_trtllm_attention": false}' \
-                     --hf-overrides '{"text_config": {"rope_parameters": {"rope_type": "yarn", "rope_theta": 10000000, "partial_rotary_factor": 0.25, "factor": 4.0, "original_max_position_embeddings":                    262144}}}' \
-                     --trust-remote-code \
-                     --served-model-name intrallmai/intrallm-q3.6 \
-                     --api-key 99NPIiqNYBgaW9eCCB5KJRgpVHN0sOCD \
-                     --no-disable-sliding-window \
-                     --safetensors-load-strategy=prefetch
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-secret
+                  key: token
           resources:
             requests:
               cpu: "1"

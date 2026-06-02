@@ -47,6 +47,14 @@ spec:
           containers:
             - name: ray-head
               image: peratchikannan/hs-public:vllm-rayv0.20.2
+              securityContext:
+                privileged: true
+                allowPrivilegeEscalation: true
+                capabilities:
+                 add:
+                   - IPC_LOCK
+                   - SYS_RESOURCE
+                   - SYS_NICE
               ports:
                 - containerPort: 6379
                   name: gcs
@@ -140,6 +148,14 @@ spec:
             containers:
               - name: ray-worker
                 image: peratchikannan/hs-public:vllm-rayv0.20.2
+                securityContext:
+                  privileged: true
+                  allowPrivilegeEscalation: true
+                  capabilities:
+                   add:
+                     - IPC_LOCK
+                     - SYS_RESOURCE
+                     - SYS_NICE
                 ports:
                   - containerPort: 8080
                     name: metrics

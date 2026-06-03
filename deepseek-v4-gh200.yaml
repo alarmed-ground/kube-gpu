@@ -1,0 +1,63 @@
+###cutedsl will be updated in a future release of vllm, Now, without sed command, the model will not load https://github.com/vllm-project/vllm/issues/44210
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deepseek-v4-gh200
+  namespace: vllm
+  labels:
+    app: deepseek-v4-gh200
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deepseek-v4-gh200
+  template:
+    metadata:
+      labels:
+        app: deepseek-v4-gh200
+    spec:
+      nodeName: 
+      volumes:
+      - name: cache-volume
+        persistentVolumeClaim:
+          claimName: 
+      # vLLM needs to access the host's shared memory for tensor parallel inference.
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: "2Gi"
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:v0.22.0
+        command: ["/bin/sh", "-c"]
+        args: [
+          "sed -i 's/cute\\.arch\\.fmin/cutlass.min/g' /usr/local/lib/python3.12/dist-packages/vllm/models/deepseek_v4/nvidia/ops/sparse_attn_compress_cutedsl.py && vllm serve deepseek-ai/DeepSeek-V4-Flash --trust-remote-code --kv-cache-dtype fp8 --block-size 256 --enable-expert-parallel --tensor-parallel-size 1 --tokenizer-mode deepseek_v4 --tool-call-parser deepseek_v4 --enable-auto-tool-choice --reasoning-parser deepseek_v4 --cpu-offload-gb 120 --api-key  --served-model-name intrallmai/deepseek-v4"
+        ]
+        env:
+        - name: LD_PRELOAD
+          value: "/usr/local/cuda/lib64/libcudart.so"
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: token
+        - name: NCCL_P2P_DISABLE
+          value: "1"
+        - name: VLLM_PORT
+          value: "80"
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            cpu: "64"
+            memory: 400G
+            nvidia.com/gpu: "1"
+          requests:
+            cpu: "32"
+            memory: 32G
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - mountPath: /root/.cache/huggingface
+          name: cache-volume
+        - name: shm
+          mountPath: /dev/shm

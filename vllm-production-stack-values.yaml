@@ -1,0 +1,374 @@
+# =============================================================================
+# vLLM Production Stack — Helm values
+# Chart : helm install intrallm vllm/vllm-stack -f values-qwen3.6-intrallm.yaml -n vllm --create-namespace
+# Ref   : https://github.com/vllm-project/production-stack
+#
+# Storage strategy: existing RWX PVC mounted via extraVolumes / extraVolumeMounts.
+#
+# sharedPvcStorage does NOT support referencing an existing PVC — it only
+# supports hostPath, nfs, or dynamic provisioning. For an existing PVC the
+# correct approach is to inject it as an extraVolume per model, which is
+# supported in modelSpec[].extraVolumes and modelSpec[].extraVolumeMounts.
+#
+# The PVC is mounted at /data/models in every pod. Set HF_HOME to that path
+# via env and point --model at the correct sub-directory.
+#
+# WHAT YOU NEED:
+#   - Your existing PVC name (kubectl get pvc -n vllm)
+#   - kubectl create secret generic vllm-api-key \
+#       --from-literal=VLLM_API_KEY=<your-key> -n vllm
+# =============================================================================
+
+servingEngineSpec:
+  enableEngine: true
+  runtimeClassName: "nvidia"
+
+  vllmApiKey:
+    secretName: "vllm-api-key"
+    secretKey: "VLLM_API_KEY"
+
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+  modelSpec:
+
+    # =========================================================================
+    # MODEL 1 — Qwen3.6-35B-A3B → gpu-node-01
+    # =========================================================================
+    - name: "intrallm-q3-6"
+      enabled: true
+
+      repository: "vllm/vllm-openai"
+      tag: "v0.27.1"
+      imagePullPolicy: "Always"
+
+      modelURL: "/data/models/hub/models--Qwen--Qwen3.6-35B-A3B"
+      replicaCount: 1
+
+      requestCPU: 16
+      requestMemory: "64Gi"
+      requestGPU: 1
+      limitCPU: 20
+      limitMemory: "80Gi"
+
+      # ── Node assignment ────────────────────────────────────────────────────
+      nodeName: "node1-quantagrid-s74g-2u-1s7g2000026"
+      # nodeSelectorTerms:
+      #   - matchExpressions:
+      #       - key: kubernetes.io/hostname
+      #         operator: In
+      #         values:
+      #           - gpu-node-01
+
+      shmSize: "20Gi"
+
+      # ── Mount your existing RWX PVC ────────────────────────────────────────
+      # Replace "your-models-pvc" with your actual PVC name.
+      # kubectl get pvc -n vllm
+      extraVolumes:
+        - name: models-storage
+          persistentVolumeClaim:
+            claimName: ""   # ← your existing PVC name here
+
+      extraVolumeMounts:
+        - name: models-storage
+          mountPath: /data/models
+          readOnly: true
+
+      # ── vLLM engine flags ──────────────────────────────────────────────────
+      vllmConfig:
+        enablePrefixCaching: true
+        enableChunkedPrefill: true
+        maxModelLen: 132000
+        dtype: "bfloat16"
+        tensorParallelSize: 1
+        gpuMemoryUtilization: 0.9187
+
+        extraArgs:
+          # Adjust the sub-path to where the weights live inside the PVC.
+          # To check: kubectl exec -it <any-pod-with-pvc> -- ls /data/models/
+          - "--enable-expert-parallel"
+          - "--mm-encoder-tp-mode"
+          - "data"
+          - "--mm-processor-cache-type"
+          - "shm"
+          - "--reasoning-parser"
+          - "qwen3"
+          - "--max_num_seqs"
+          - "828"
+          - "--enable-auto-tool-choice"
+          - "--tool-call-parser"
+          - "qwen3_coder"
+          - "--attention-config"
+          - '{"use_trtllm_attention": false}'
+          - "--hf-overrides"
+          - '{"text_config": {"mrope_interleaved": true, "mrope_section": [11, 11, 10], "rope_type": "yarn", "rope_theta": 10000000, "partial_rotary_factor": 0.25, "factor": 4.0, "original_max_position_embeddings": 262144}}'
+          - "--no-disable-sliding-window"
+          - "--trust-remote-code"
+          - "--served-model-name"
+          - "intrallmai/intrallm-q3.6"
+
+      env:
+        - name: VLLM_WORKER_MULTIPROC_METHOD
+          value: "spawn"
+        # HF_HOME is already injected by the chart — do NOT set it here or
+        # kubectl apply will warn: "hides previous definition of HF_HOME"
+
+      startupProbe:
+        initialDelaySeconds: 60
+        periodSeconds: 15
+        failureThreshold: 80          # ~20 min for model load
+        httpGet:
+          path: /health
+          port: 8000
+      livenessProbe:
+        initialDelaySeconds: 60
+        periodSeconds: 30
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 8000
+      readinessProbe:
+        initialDelaySeconds: 60
+        periodSeconds: 10
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 8000
+
+      lmcacheConfig:
+        enabled: false
+      enableLoRA: false
+
+
+    # =========================================================================
+    # MODEL 2 — Whisper Large v3 → gpu-node-02
+    #
+    # NOTE: Whisper requires libsndfile, ffmpeg, and av/librosa/soundfile.
+    # The chart does not support an init-container apt/pip install step,
+    # so use a pre-baked image or a custom Dockerfile that extends
+    # vllm/vllm-openai:latest with those dependencies pre-installed.
+    # Alternatively keep the original standalone Deployment manifest and
+    # manage it separately from this Helm chart.
+    # =========================================================================
+    - name: "whisper-large-v3"
+      enabled: true
+
+      repository: ""
+      tag: "whisper-vllm-aarch64"
+      imagePullPolicy: "Always"
+
+      modelURL: "openai/whisper-large-v3"
+      replicaCount: 1
+
+      requestCPU: 2
+      requestMemory: "6Gi"
+      requestGPU: 1
+      limitCPU: 10
+      limitMemory: "20Gi"
+
+      # ── Node assignment ──────────────────────────────────────────────────────
+      nodeName: "node3-quantagrid-s74g-2u-1s7g2000026"       # ← replace with your actual node name
+      # nodeSelectorTerms:
+      #   - matchExpressions:
+      #       - key: kubernetes.io/hostname
+      #         operator: In
+      #         values:
+      #           - gpu-node-02
+
+      shmSize: "2Gi"
+
+      # ── Same shared PVC ──────────────────────────────────────────────────────
+      extraVolumes:
+        - name: models-storage
+          persistentVolumeClaim:
+            claimName: ""   # ← same PVC as Model 1
+
+      extraVolumeMounts:
+        - name: models-storage
+          mountPath: /data/models
+          readOnly: true
+
+      vllmConfig:
+        enablePrefixCaching: false
+        enableChunkedPrefill: false
+        maxModelLen: 448
+        dtype: "float16"
+        tensorParallelSize: 1
+        gpuMemoryUtilization: 0.90
+
+        extraArgs:
+          - "--max-num-seqs"
+          - "64"
+          - "--served-model-name"
+          - "intrallmai/whisper-large-v3"
+
+      env:
+        - name: VLLM_ATTENTION_BACKEND
+          value: "TRITON_ATTN"
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-secret
+              key: token
+        # HF_HOME is already injected by the chart — do NOT set it here
+
+      startupProbe:
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        failureThreshold: 30
+        httpGet:
+          path: /health
+          port: 8000
+      livenessProbe:
+        initialDelaySeconds: 30
+        periodSeconds: 30
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 8000
+      readinessProbe:
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 8000
+
+      lmcacheConfig:
+        enabled: false
+      enableLoRA: false
+
+
+    # =========================================================================
+    # MODEL 3 — Gemma 4 12B → gpu-node-03
+    # =========================================================================
+    - name: "gemma4-12b"
+      enabled: true
+
+      repository: "vllm/vllm-openai"
+      tag: "v0.25.1"
+      imagePullPolicy: "Always"
+
+      modelURL: "/data/models/hub/models--google--gemma-4-12B-it/snapshots/5926caa4ec0cac5cbfadaf4077420520de1d5205"
+      replicaCount: 1
+
+      requestCPU: 8
+      requestMemory: "32Gi"
+      requestGPU: 1
+      limitCPU: 12
+      limitMemory: "48Gi"
+
+      # ── Node assignment ──────────────────────────────────────────────────────
+      nodeName: "node2-quantagrid-s74g-2u-1s7g2000026"       # ← replace with your actual node name
+      # nodeSelectorTerms:
+      #   - matchExpressions:
+      #       - key: kubernetes.io/hostname
+      #         operator: In
+      #         values:
+      #           - gpu-node-03
+
+      shmSize: "8Gi"
+
+      # ── Same shared PVC ──────────────────────────────────────────────────────
+      extraVolumes:
+        - name: models-storage
+          persistentVolumeClaim:
+            claimName: ""   # ← same PVC as Models 1 & 2
+
+      extraVolumeMounts:
+        - name: models-storage
+          mountPath: /data/models
+          readOnly: true
+
+      vllmConfig:
+        enablePrefixCaching: true
+        enableChunkedPrefill: true
+        maxModelLen: 131072
+        dtype: "bfloat16"
+        tensorParallelSize: 1
+        gpuMemoryUtilization: 0.90
+
+        extraArgs:
+          - "--trust-remote-code"
+          - "--served-model-name"
+          - "intrallmai/intrallm-g4-12b-it"
+
+      env:
+        - name: VLLM_WORKER_MULTIPROC_METHOD
+          value: "spawn"
+        # HF_HOME is already injected by the chart — do NOT set it here
+
+      startupProbe:
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        failureThreshold: 40          # ~6 min for model load
+        httpGet:
+          path: /health
+          port: 8000
+      livenessProbe:
+        initialDelaySeconds: 30
+        periodSeconds: 30
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 8000
+      readinessProbe:
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 8000
+
+      lmcacheConfig:
+        enabled: false
+      enableLoRA: false
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROUTER
+# ─────────────────────────────────────────────────────────────────────────────
+routerSpec:
+  enableRouter: true
+  repository: "lmcache/lmstack-router"
+  tag: "latest"
+  imagePullPolicy: "Always"
+  replicaCount: 1
+
+  affinity:
+     nodeAffinity:
+       requiredDuringSchedulingIgnoredDuringExecution:
+         nodeSelectorTerms:
+           - matchExpressions:
+               - key: kubernetes.io/hostname
+                 operator: In
+                 values:
+                   - node1
+  routingLogic: "roundrobin"
+  sessionKey: "x-user-id"
+  serviceType: ClusterIP
+  servicePort: 80
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+  engineScrapeInterval: 15
+  requestStatsWindow: 60
+  vllmApiKey:
+    secretName: "vllm-api-key"
+    secretKey: "VLLM_API_KEY"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OBSERVABILITY
+# ─────────────────────────────────────────────────────────────────────────────
+grafanaDashboards:
+  enabled: false
+kube-prometheus-stack:
+  enabled: false

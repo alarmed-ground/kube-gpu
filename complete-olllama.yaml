@@ -1,0 +1,135 @@
+---
+# Created if missing, untouched if it already exists.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ollama
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models-pvc
+  namespace: ollama
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: microk8s-hostpath
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen3-5-0-8b-ollama
+  namespace: ollama
+  labels:
+    app: qwen3-5-0-8b-ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qwen3-5-0-8b-ollama
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: qwen3-5-0-8b-ollama
+    spec:
+      nodeName: ws1
+
+      # tolerations:
+      #   - key: "nvidia.com/gpu"
+      #     operator: "Exists"
+      #     effect: "NoSchedule"
+
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest   # pin a specific version for reproducibility
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+              ollama serve &
+              SERVER_PID=$!
+              until ollama list >/dev/null 2>&1; do sleep 1; done
+              # Pull only if not already on the PVC
+              ollama list | grep -q "^${OLLAMA_MODEL}" || ollama pull "${OLLAMA_MODEL}"
+              # Warm the model into memory (keep_alive is set via env below)
+              ollama run "${OLLAMA_MODEL}" "" >/dev/null 2>&1 || true
+              wait $SERVER_PID
+          env:
+            - name: OLLAMA_MODEL
+              value: "qwen3.5:0.8b"      # verify the tag with `ollama search qwen3.5`
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+            - name: OLLAMA_MODELS
+              value: /root/.ollama/models
+            - name: OLLAMA_KEEP_ALIVE
+              value: "-1"                # keep model loaded
+            - name: OLLAMA_NUM_PARALLEL
+              value: "4"
+            - name: OLLAMA_FLASH_ATTENTION
+              value: "1"
+            - name: OLLAMA_CONTEXT_LENGTH
+              value: "32768"
+            - name:  OLLAMA_API_KEY
+              value: "Hyper1831"
+          ports:
+            - containerPort: 11434
+              name: http
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+              # Ollama shares s5n with the vLLM deployment. On a single-GPU node,
+              # both can't request nvidia.com/gpu: 1 at once, so Ollama runs on CPU
+              # by default (fine for a 0.8B model). To use the GPU instead, uncomment
+              # below (and stop the vLLM deployment, or enable GPU time-slicing).
+              # nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: "8Gi"
+              #nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+          startupProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["/bin/bash", "-c", "ollama list | grep -q qwen3.5"]
+            periodSeconds: 15
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 11434
+            periodSeconds: 30
+            failureThreshold: 5
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen3-5-0-8b-ollama-svc
+  namespace: ollama
+  labels:
+    app: qwen3-5-0-8b-ollama
+spec:
+  selector:
+    app: qwen3-5-0-8b-ollama
+  ports:
+    - port: 11434
+      targetPort: 11434
+      protocol: TCP
+      name: http
+  type: ClusterIP
